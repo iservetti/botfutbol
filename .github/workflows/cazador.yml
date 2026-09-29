@@ -22,8 +22,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install requests playwright
 
-      - name: Instalar dependencias de Playwright
-        run: playwright install chromium
+      - name: Instalar dependencias de Playwright y del Sistema
+        run: |
+          playwright install chromium
+          playwright install-deps chromium
 
       - name: Ejecutar script de rastreo
         env:
