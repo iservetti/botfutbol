@@ -1,1 +1,32 @@
+name: Cazador de Cuotas
 
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch: 
+
+jobs:
+  run-scraper:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests playwright
+
+      - name: Instalar dependencias de Playwright
+        run: playwright install chromium
+
+      - name: Ejecutar script de rastreo
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python bot.py
