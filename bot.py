@@ -5,7 +5,6 @@ import re
 import random
 from datetime import datetime
 
-# Se leen de forma segura desde la nube de GitHub
 TOKEN = os.environ.get("TELEGRAM_TOKEN", "8746465129:AAEBGR8UfqUrkxp3g-w8gyqKAUqveTZnwF4")
 CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "8449279037")
 
@@ -29,10 +28,20 @@ def enviar_alerta(texto):
     except Exception as e:
         print(f"⚠️ Error al guardar en el historial local: {e}")
 
+def es_futbol_ascenso_argentino(texto_upper):
+    # Palabras clave para detectar todo el ascenso y el interior
+    palabras_clave = [
+        "PRIMERA NACIONAL", "B METROPOLITANA", "PRIMERA C", "PRIMERA D", 
+        "TORNEO FEDERAL", "FEDERAL A", "FEDERAL B", "FEDERAL C", 
+        "INTERIOR", "LIGA DEL INTERIOR", "TORNEO REGIONAL", 
+        "COPA ARGENTINA", "LIGA PROFESIONAL", "RESERVA", "SUPERLIGA"
+    ]
+    return any(k in texto_upper for k in palabras_clave)
+
 def identificar_deporte(texto):
     texto_upper = texto.upper()
-    if any(k in texto_upper for k in ["ARGENTINA", "LIGA PROFESIONAL", "PRIMERA NACIONAL", "COPA ARGENTINA", "RESERVA", "SUPERLIGA"]):
-        return "🇦🇷 Fútbol Argentino (Ligas/Estadísticas)"
+    if es_futbol_ascenso_argentino(texto_upper):
+        return "🇦🇷 Fútbol Argentino / Ascenso"
     elif any(k in texto_upper for k in ["VIRTUAL", "ESPORTS", "ESPORT", "CS:GO", "DOTA", "LEAGUE OF LEGENDS", "VALORANT", "E-FUTBOL", "E-BASKET"]):
         return "🎮 eSports / Virtuales"
     elif any(k in texto_upper for k in ["BASKET", "NBA", "EUROLIGA", "LNB", "BALONCESTO"]):
@@ -48,6 +57,7 @@ def procesar_bloques(pagina, nombre_casa):
     bloques = pagina.locator("div").all()
     partidos_procesados = set()
     bugs_encontrados = 0
+    partidos_ascenso_avisados = set()
     
     for bloque in bloques:
         try:
@@ -62,6 +72,17 @@ def procesar_bloques(pagina, nombre_casa):
             if texto_limpio in partidos_procesados: continue
             partidos_procesados.add(texto_limpio)
             
+            texto_upper = texto_limpio.upper()
+            
+            # 1. AVISO DE PARTIDO NUEVO: Si detecta cualquier evento del ascenso o interior argentino
+            if es_futbol_ascenso_argentino(texto_upper):
+                # Usamos una porción del texto como identificador único para no repetir el aviso del mismo partido
+                id_partido = texto_limpio[:40]
+                if id_partido not in partidos_ascenso_avisados:
+                    partidos_ascenso_avisados.add(id_partido)
+                    aviso_partido = f"📌 [{nombre_casa}] Nuevo partido de Ascenso/Interior detectado:\n📝 {texto_limpio[:80]}"
+                    enviar_alerta(aviso_partido)
+
             deporte_detectado = identificar_deporte(texto_limpio)
             
             cuotas_str = re.findall(r"\b\d{1,3}\.\d{2}\b", texto_limpio)
@@ -78,7 +99,6 @@ def procesar_bloques(pagina, nombre_casa):
                     bugs_encontrados += 1
                     alerta = f"🚨 [{nombre_casa}] ¡BUG REAL (1X2) en {deporte_detectado}!\n📉 Margen: {margen:.3f}\n💰 Cuotas Altas: {cuotas_usadas}\n📝 {texto_limpio[:70]}"
                     enviar_alerta(alerta)
-                    print(f" >>> ¡ALERTA REAL ENVIADA DE {nombre_casa} ({deporte_detectado})!")
 
             elif len(cuotas) == 2:
                 if not any(c > 2.0 for c in cuotas):
@@ -94,7 +114,6 @@ def procesar_bloques(pagina, nombre_casa):
                     bugs_encontrados += 1
                     alerta = f"🚨 [{nombre_casa}] ¡BUG REAL (2 OPCIONES) en {deporte_detectado}!\n📉 Margen: {margen:.3f}\n💰 Cuotas Altas: {cuotas_usadas}\n📝 {texto_limpio[:70]}"
                     enviar_alerta(alerta)
-                    print(f" >>> ¡ALERTA REAL ENVIADA DE {nombre_casa} ({deporte_detectado})!")
         
         except Exception:
             continue
@@ -102,11 +121,10 @@ def procesar_bloques(pagina, nombre_casa):
     print(f"[{nombre_casa}] Ciclo terminado. Bloques analizados: {len(partidos_procesados)} | Bugs: {bugs_encontrados}")
 
 def ejecutar_escaneo_unico():
-    print("🎯 Iniciando escaneo único en la nube...")
+    print("🎯 Iniciando escaneo completo (Ascenso + Cuotas Altas)...")
     agente_actual = random.choice(USER_AGENTS)
     
     with sync_playwright() as p:
-        # Obligatorio headless=True para servidores de nube
         navegador = p.chromium.launch(
             headless=True,
             args=["--disable-blink-features=AutomationControlled", "--no-sandbox", "--disable-setuid-sandbox"]
